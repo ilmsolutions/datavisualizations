@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="//fonts.googleapis.com/css?family=Open+Sans:400,700" rel="stylesheet" type="text/css">
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+<link rel="stylesheet" href="css/colorbrewer.css" type="text/css">
+</head>
+<body>
+<div class="container">
+<div id="legend">
+</div>
+<div id="world-map">
+</div>
+</div>
+<script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
+<script src="https://d3js.org/topojson.v1.min.js"></script>
+<script src="https://d3js.org/d3-array.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+<script src="http://d3js.org/colorbrewer.v1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="js/d3commons.graph.js"></script>
+<script src="js/maps.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){
+
+var  dispatches = d3.dispatch('loaded')
+     , mapdef = d3maps({height: 500
+                       , dispatches: dispatches
+                       , behaviors: new Map([['mouseover', d3maps.behaviors.mouseover]
+                                            , ['mouseout', d3maps.behaviors.mouseout]])
+                      })
+     ,legend = d3.select("#legend").append("ul")
+               .attr("class", "list-inline")
+     , map = d3.select("#world-map");
+
+d3.json("./maps/countries.json?d=06262018", function(er, world){
+
+    if(er) return;
+
+    var features = topojson.feature(world, world.objects.ne_110m_admin_0_countries).features;
+
+    map.datum(features.filter(function(d){
+          return Number.parseInt(d.properties.code) > 0;
+    })).call(mapdef);
+
+});
+
+//fill data functionality
+var filldata = d3.csv('./data/migration_incoming.csv')
+   ,rformatter = function(d, col){
+     //console.log(col);
+     var regexp = /[\w\s/-/(/)]+\[([A-Z0-9]*)\]/i
+        , kcodematch = d['Destination'].match(regexp)
+        , scodematch = d['Source'].match(regexp);
+        
+       return {key: kcodematch && kcodematch.length > 1 ? kcodematch[1] : null
+              , skey: scodematch && scodematch.length > 1 ? scodematch[1] : null
+              , kcountry: d['Destination'], scountry: d['Source'], year: d['Year'], value: +d[col]}
+   }
+   ,loadfilldata = function(valcol, callback){
+    return filldata.row(function(d){
+        return rformatter.call(this, d, valcol);
+    }).get(callback);
+    };
+
+dispatches.on('loaded.map', function(){
+    var _self = d3.select(this);
+    loadfilldata('Count', function(cerr, rows){
+            var m = d3.nest()
+                  .key(function(d){return d.key})
+                  .key(function(d){return d.skey})
+                  .rollup(function(leaves){                    
+                     return d3.sum(leaves, function(d){return parseInt(d.value)});
+                  })
+                  .entries(rows.filter(function(d){   
+                      var k = Number.parseInt(d.key)
+                        , s = Number.parseInt(d.skey);                                       
+                      return d.key != null && d.skey != null && ['2017'].indexOf(d.year) >= 0
+                           && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
+                  }))
+                  ,tots = m.map(function(d){
+                    var tot = d3.sum(d.values.map(function(_d){
+                        return _d.value;
+                    })); 
+                    return {key: d.key, value: tot, values: d.values};
+                   });
+
+             mapdef.legend.call(map.node(), legend);
+             mapdef.filldata.call(map.node(), tots).visualize.call(map.node());
+             
+         });
+
+});
+
+});
+</script>
+<style type="text/css">
+body{
+font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+
+.container{
+   position:relative;
+}
+#world-map{
+   margin:1em;
+}
+
+
+.country {
+   stroke: currentColor;
+   stroke-width: 0.06em;
+}
+
+#legend {
+    padding: 1.5em 0 0 1.5em;
+}
+
+li.key {
+   display: inline-block;
+    border-top-width: 15px;
+    border-top-style: solid;
+    font-size: .75em;
+    width: 10%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+
+.feature-highlight{
+    fill-opacity: 1;
+    stroke-opacity: 1;
+}
+
+.mouse-over .country:not(.feature-highlight){
+    fill-opacity: 0.2;
+    stroke-opacity: 0.2;
+} 
+
+</style>
+</body>
+</html>

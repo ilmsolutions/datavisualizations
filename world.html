@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="//fonts.googleapis.com/css?family=Open+Sans:400,700" rel="stylesheet" type="text/css">
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+<link rel="stylesheet" href="css/colorbrewer.css" type="text/css">
+</head>
+<body>
+<div class="container">
+<div id="legend">
+</div>
+<div id="world-map">
+</div>
+<div id="donut-display">
+</div>
+</div>
+<script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
+<script src="https://d3js.org/topojson.v1.min.js"></script>
+<script src="https://d3js.org/d3-array.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+<script src="http://d3js.org/colorbrewer.v1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script>
+function join(lookupTable, mainTable, lookupKey, mainKey, select) {
+    var l = lookupTable.length,
+        m = mainTable.length,
+        lookupIndex = [],
+        output = [];
+    for (var i = 0; i < l; i++) { // loop through l items
+        var row = lookupTable[i];
+        lookupIndex[row[lookupKey]] = row; // create an index for lookup table
+    }
+    for (var j = 0; j < m; j++) { // loop through m items
+        var y = mainTable[j];
+        var x = lookupIndex[y[mainKey]]; // get corresponding row from lookupTable
+        output.push(select(y, x)); // select only the columns you need
+    }
+    return output;
+};
+</script>
+<script>
+var vlist = ["Count"],
+    filter = {key: 'Year', values:['2017']},
+    dispatch = d3.dispatch("load_fill", "mouseover", "mouseout"),
+    rvs = d3.csv("./data/migration_incoming.csv"),
+    rfilter = function(d){
+        return filter.values.indexOf(d[filter.key]) >= 0;
+    },
+    rformatter = function(d, col){
+     //console.log(col);
+     var regexp = /[\w\s/-/(/)]+\[([A-Z0-9]*)\]/i
+        , kcodematch = d['Destination'].match(regexp)
+        , scodematch = d['Source'].match(regexp);
+        
+       return {key: kcodematch && kcodematch.length > 1 ? kcodematch[1] : null
+              , skey: scodematch && scodematch.length > 1 ? scodematch[1] : 
+                        d['Source'] == 'Total' ? 'TOT' : null
+              , kcountry: d['Destination'], scountry: d['Source']
+              , fkey: d['Year'], value: +d[col]}
+};
+var width = 960,
+    height = 500,
+    data, features;
+
+var projection =  d3.geoEquirectangular() //d3.geoCylindricalStereographic() //
+    //.parallel(45)
+    //.rotate([90, 0])
+    //.center([60,0])
+
+    .scale(200)
+    .translate([width / 2, height / 2])
+    .precision(.1);
+
+var path = d3.geoPath()
+    .projection(projection);
+
+
+var svg = d3.select("#world-map")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .classed('YlOrRd', true)
+,   legend = d3.select("#legend").append("ul")
+               .attr("class", "list-inline")
+,   colorswatch = colorbrewer[svg.attr('class')];
+   // console.log(d3.select("#world-map"));
+
+var formatter = d3.format(".2s"),
+    qtz = d3.scaleQuantize()
+           //.domain(d3.extent(m.values()))
+			.range(d3.range(9).map(function(i){
+									   return "q" + i + "-9";
+								   })),
+   qtl = d3.scaleQuantile()
+           .range(d3.range(9).map(function(i){
+									   return "q" + i + "-9";
+								   })),
+           
+   mouseovr = function(d){
+  //   console.log(d);
+     if(d && d.measure && d.measure.values){
+        var _self = d3.select(this)
+         ,_keys = d.measure.values.map(function(_d){return _d.key;});
+   
+      svg.classed('mouse-over', true);
+      svg.selectAll('path.country')
+         .filter(function(_d){
+            return _d.properties.code == d.properties.code || _keys.indexOf(_d.properties.code) >= 0;
+         }).classed('feature-highlight', true);
+
+     }
+   },
+   mouseout = function(d){
+      //$(this).popover('hide');
+      svg.classed('mouse-over', false);
+      svg.selectAll('path.country').classed('feature-highlight', false);
+   };
+
+
+
+//be able to tween different values
+//load the csv key value pair
+//quantize rate
+//
+
+var handler = function(valcol, callback){
+   return rvs.row(function(d){
+       return rformatter.call(this, d, valcol);
+    }).get(callback);
+};
+
+dispatch.on("load_fill.svg", function(valcol){
+   var loader = handler(valcol, function(cerr, rows){
+        var m = d3.nest()
+                  .key(function(d){return d.key})
+                  .key(function(d){return d.skey})
+                  .rollup(function(leaves){                    
+                     return d3.sum(leaves.filter(function(d){
+                                           return filter.values.indexOf(d.fkey) >= 0;
+                                      }), function(d){return parseInt(d.value)});
+                  })
+                  .entries(rows.filter(function(d){   
+                      var k = Number.parseInt(d.key)
+                        , s = Number.parseInt(d.skey);                                       
+                      return d.key != null && d.skey != null && filter.values.indexOf(d.fkey) >= 0
+                           && d.skey != 'TOT'
+                           && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
+                  }))
+        , sum = 0
+        ,tots = m.map(function(d){
+            var tot = d3.sum(d.values.map(function(_d){
+                 return _d.value;
+            })); 
+            //console.log(d);        
+            sum += tot;
+            return {key: d.key, value: tot, values: d.values};
+        });
+
+        data = d3.map(tots, function(d){return d.key});
+        
+//        console.log(m);
+        qtz.domain(d3.extent(tots.map(function(d){return d.value}))); 
+        
+        svg.selectAll('path.country')
+            .each(function(d){
+                var _self = d3.select(this);
+
+                d.center = path.centroid(d);
+                d.measure  = data.get(d.properties.code);
+
+                if(d.measure){
+                    _self.classed(qtz(d.measure.value), true);
+                }
+            })
+
+        console.log(colorswatch);                        
+        var keys = legend.selectAll("li.key")
+                         .data(qtz.range());
+        keys.enter().append("li").attr('class',  function(d){
+            return 'key ' + d;
+        })
+        .style('border-color', function(d){
+            var matches = d.match(/^q([0-9])-([0-9])$/i);
+            return matches.length >=2 ? colorswatch[matches[2]][matches[1]] : '#fff';;
+        })
+        .text(function(d){
+                var r= qtz.nice().invertExtent(d);
+                return formatter(r[0]);
+        });
+   });
+});
+
+d3.json("./maps/countries.json?d=06262018", function(er, world){
+
+    if(er) return;
+   
+   features = topojson.feature(world, world.objects.ne_110m_admin_0_countries).features;
+   svg.selectAll("path.country")
+      .data(features.filter(function(d){
+          return Number.parseInt(d.properties.code) > 0;
+      }), function(d, i){ return d.properties.code;})
+      .enter().append("path").attr("class", "country")
+      .attr("d", path)
+      .on("mouseover",  mouseovr)
+      .on("mouseout", mouseout);
+
+   //dispatch.load_fill(rlist[4]);
+   var _n = 0;
+  // setInterval(function(){
+      dispatch.call('load_fill', svg, vlist[_n]);
+  //    _n = (_n + 1) % rlist.length;
+  // }, 3000);
+});
+
+
+// Store the displayed angles in _current.
+// Then, interpolate from _current to the new angles.
+// During the transition, _current is updated in-place by d3.interpolate.
+function arcTween(a) {
+  var i = d3.interpolate(this._current, a);
+  this._current = i(0);
+  return function(t) {
+    return arc(i(t));
+  };
+}
+
+
+</script>
+<style>
+body{
+font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+
+.container{
+   position:relative;
+}
+#world-map{
+   margin:1em;
+}
+#donut-display{
+  position:absolute;
+}
+text{
+  text-anchor:middle;
+}
+
+
+.country {
+   stroke: currentColor;
+   stroke-width: 0.06em;
+}
+
+.list-inline {
+    padding-left: 0px;
+    list-style: outside none none;
+}
+ul, ol {
+    margin-top: 0px;
+    margin-bottom: 10px;
+}
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+
+#legend {
+    padding: 1.5em 0 0 1.5em;
+}
+
+li.key {
+   display: inline-block;
+    border-top-width: 15px;
+    border-top-style: solid;
+    font-size: .75em;
+    width: 10%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+
+.feature-highlight{
+    fill-opacity: 1;
+    stroke-opacity: 1;
+}
+
+.mouse-over .country:not(.feature-highlight){
+    fill-opacity: 0.2;
+    stroke-opacity: 0.2;
+} 
+
+</style>
+</body>
+
+</html>
