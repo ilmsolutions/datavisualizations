@@ -29,9 +29,9 @@ d3commons.graph = function (globals) {
         return props;
     };
 
-    //graph.formatter = d3commons.utilities.formatter;
+    graph.formatter = d3commons.utilities.formatter;
 
-    //graph.valueformatter = d3commons.utilities.valueformatter;
+    graph.valueformatter = d3commons.utilities.valueformatter;
 
     //graph.forecolor = d3commons.utilities.forecolor;
 

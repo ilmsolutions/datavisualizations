@@ -13,18 +13,8 @@
 <div id="world-map">
 </div>
 <div id="year-list">
-    <ul>
-        <li>1990</li>
-        <li>1995</li>
-        <li>2000</li>
-        <li>2005</li>
-        <li>2010</li>
-        <li>2015</li>
-        <li class='active'>2017</li>
-    </ul>
 </div>
 <div id="information-block">
-   Print information here
 </div>
 </div>
 <script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
@@ -35,19 +25,26 @@
 <script src="http://d3js.org/colorbrewer.v1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 <script src="js/d3commons.graph.js"></script>
+<script src="js/d3commons.utilities.js"></script>
 <script src="js/maps.js"></script>
 <script type="text/javascript">
 $(document).ready(function(){
 
-var  dispatches = d3.dispatch('loaded')
+var  dispatches = d3.dispatch('loaded', 'mouseover', 'mouseout')
      , mapdef = d3maps({height: 500
                        , dispatches: dispatches
                        , behaviors: new Map([['mouseover', d3maps.behaviors.mouseover]
                                             , ['mouseout', d3maps.behaviors.mouseout]])
+                       , legend:{formatter: d3commons.utilities.formatter('numberinmillions')}
                       })
      ,legend = d3.select("#legend").append("ul")
                .attr("class", "list-inline")
-     , map = d3.select("#world-map");
+     , map = d3.select("#world-map")
+     , yearlist = d3.select('#year-list').append('ul')
+     , informationblock = d3.select('#information-block')
+     , formatter = d3commons.utilities.formatter('number');
+
+
 
 d3.json("./maps/countries.json?d=06262018", function(er, world){
 
@@ -80,13 +77,28 @@ var filldata = d3.csv('./data/migration_incoming.csv')
     }
     , getselectedyear = function(){
         return $('#year-list').find('li.active').html();
-    };
+    }
+    , updateinformationblock = function(o){
+        var title = informationblock.selectAll('h5')
+                           .data([o], function(d){return d.key;})
+          , description = informationblock.selectAll('span')
+                           .data(o.descriptions, function(d, i){return d;});
+
+        title.exit().remove();
+        title.enter().append('h5').html(function(d){return d.title;});
+
+        description.exit().remove();
+        description.enter().append('span').html(function(d){return d;});
+
+    }
+    , defaultinformationblock;
+
 
 dispatches.on('loaded.map', function(){
-    console.log('in loaded map');
     var _self = d3.select(this);
     loadfilldata('Count', function(cerr, rows){
-            var m = d3.nest()
+            var selyear = getselectedyear()
+                , m = d3.nest()
                   .key(function(d){return d.key})
                   .key(function(d){return d.skey})
                   .rollup(function(leaves){                    
@@ -95,26 +107,57 @@ dispatches.on('loaded.map', function(){
                   .entries(rows.filter(function(d){   
                       var k = Number.parseInt(d.key)
                         , s = Number.parseInt(d.skey);                                       
-                      return d.key != null && d.skey != null && [getselectedyear()].indexOf(d.year) >= 0
+                      return d.key != null && d.skey != null && [selyear].indexOf(d.year) >= 0
                            && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
                   }))
+                  ,sum = 0
                   ,tots = m.map(function(d){
                     var tot = d3.sum(d.values.map(function(_d){
                         return _d.value;
                     })); 
+                    sum += tot;
                     return {key: d.key, value: tot, values: d.values};
                    });
 
              mapdef.legend.call(map.node(), legend);
              mapdef.filldata.call(map.node(), tots).visualize.call(map.node());
-             
+
+             defaultinformationblock = {
+                        key: selyear
+                        , title: 'Global Migration In - ' + selyear
+                        , descriptions: [
+                            'Total: ' + formatter(sum)
+                        ]}; 
+             updateinformationblock(defaultinformationblock);
+
          });
 
 })
+.on('mouseover.feature', function(d){
+   //render information block
+   updateinformationblock({
+          key: d.properties.code
+        , title: 'Country Profile -' + getselectedyear()
+        , descriptions: [
+            'Country: ' + d.properties.name 
+          , 'Total: ' + formatter(d.measure.value)
+        ]
+   })
+})
+.on('mouseout.feature', function(d){
+    updateinformationblock(defaultinformationblock);
+});
 
-$('#year-list').on('click', 'li', function(){
+yearlist.selectAll('li')
+        .data(['1990', '1995', '2000', '2005', '2010', '2015', '2017'])
+        .enter().append('li')
+        .text(function(d){ return d})
+        .filter(':last-child').classed('active', true);
+
+$(yearlist.node()).on('click', 'li', function(){
       $(this).parent().find('li.active').removeClass('active');
       $(this).addClass('active');
+
       dispatches.call('loaded');
 });
 
@@ -163,8 +206,8 @@ li.key {
     border-top-style: solid;
     font-size: .75em;
     width: 10%;
-    padding:0;
     cursor:pointer;
+    margin: 5px;
 }
 
 #year-list li.active{
@@ -181,6 +224,9 @@ li.key {
     stroke-opacity: 0.2;
 } 
 
+#information-block span{
+    display:block;
+}
 
 </style>
 </body>

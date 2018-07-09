@@ -23,6 +23,8 @@ function d3maps(o){
             if(data)
                d3.select(this).datum(data);
 
+            this.dispatches = config.dispatches;
+
             chart.draw.call(this, o);
 
             //chart.update.call(this, config);
@@ -68,8 +70,10 @@ function d3maps(o){
         if(_draw)
            _draw.call(this, opt);
 
-        if(config.dispatches)
-           config.dispatches.call('loaded', svg);
+        if(this.dispatches){
+            this.dispatches.call('loaded', svg);
+        }
+           
 
         return chart;
     }
@@ -130,7 +134,7 @@ function d3maps(o){
 
     chart.dispatches = function (_) {
         if (!arguments.length) return dispatches;
-        dispatches = d3.dispatch(_);
+        this.dispatches = d3.dispatch(_);
         return chart;
     }
 
@@ -193,6 +197,7 @@ d3maps.behaviors = {
             var _self = d3.select(this).classed('feature-selected', true)
                           .style('filter', 'url(#dropshadow)')
                ,_parent = d3.select(this.parentNode)
+               ,_container = this.parentNode.parentNode
                ,_keys = d.measure.values.map(function(_d){return _d.key;});
        
             _parent.classed('mouse-over', true);
@@ -200,13 +205,18 @@ d3maps.behaviors = {
                 .filter(function(_d){
                     return _d.properties.code == d.properties.code || _keys.indexOf(_d.properties.code) >= 0;
                 }).classed('feature-highlight', true);
+
+            _container.dispatches.call('mouseover', this, d);
+            
        }
     }
   , mouseout: function(d){
-    var _parent = d3.select(this.parentNode);
+    var _parent = d3.select(this.parentNode)
+       ,_container = this.parentNode.parentNode;
     d3.select(this).classed('feature-selected', false).style('filter', '')
     _parent.classed('mouse-over', false);
     _parent.selectAll('path.country').classed('feature-highlight', false);
+    _container.dispatches.call('mouseout', this, d);
   }
 }
 
