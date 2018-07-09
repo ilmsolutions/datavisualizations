@@ -12,6 +12,20 @@
 </div>
 <div id="world-map">
 </div>
+<div id="year-list">
+    <ul>
+        <li>1990</li>
+        <li>1995</li>
+        <li>2000</li>
+        <li>2005</li>
+        <li>2010</li>
+        <li>2015</li>
+        <li class='active'>2017</li>
+    </ul>
+</div>
+<div id="information-block">
+   Print information here
+</div>
 </div>
 <script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
 <script src="https://d3js.org/topojson.v1.min.js"></script>
@@ -63,9 +77,13 @@ var filldata = d3.csv('./data/migration_incoming.csv')
     return filldata.row(function(d){
         return rformatter.call(this, d, valcol);
     }).get(callback);
+    }
+    , getselectedyear = function(){
+        return $('#year-list').find('li.active').html();
     };
 
 dispatches.on('loaded.map', function(){
+    console.log('in loaded map');
     var _self = d3.select(this);
     loadfilldata('Count', function(cerr, rows){
             var m = d3.nest()
@@ -77,7 +95,7 @@ dispatches.on('loaded.map', function(){
                   .entries(rows.filter(function(d){   
                       var k = Number.parseInt(d.key)
                         , s = Number.parseInt(d.skey);                                       
-                      return d.key != null && d.skey != null && ['2017'].indexOf(d.year) >= 0
+                      return d.key != null && d.skey != null && [getselectedyear()].indexOf(d.year) >= 0
                            && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
                   }))
                   ,tots = m.map(function(d){
@@ -92,6 +110,12 @@ dispatches.on('loaded.map', function(){
              
          });
 
+})
+
+$('#year-list').on('click', 'li', function(){
+      $(this).parent().find('li.active').removeClass('active');
+      $(this).addClass('active');
+      dispatches.call('loaded');
 });
 
 });
@@ -107,7 +131,11 @@ font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
 #world-map{
    margin:1em;
 }
-
+#information-block{
+    position:absolute;
+    left: 0;
+    top: 400px;
+}
 
 .country {
    stroke: currentColor;
@@ -117,6 +145,7 @@ font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
 #legend {
     padding: 1.5em 0 0 1.5em;
 }
+
 
 li.key {
    display: inline-block;
@@ -128,6 +157,19 @@ li.key {
     padding-right: 0;
 }
 
+#year-list li{
+    display: inline-block;
+    border-top-width:5px;
+    border-top-style: solid;
+    font-size: .75em;
+    width: 10%;
+    padding:0;
+    cursor:pointer;
+}
+
+#year-list li.active{
+    border-color:cornflowerblue;
+}
 
 .feature-highlight{
     fill-opacity: 1;
@@ -138,6 +180,7 @@ li.key {
     fill-opacity: 0.2;
     stroke-opacity: 0.2;
 } 
+
 
 </style>
 </body>

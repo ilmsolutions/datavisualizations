@@ -1,6 +1,7 @@
 function d3maps(o){
     var config = {
        type: 'world'
+      ,feature: 'country' 
       ,colorbrewer: 'YlOrRd'
       ,dispatches: null
       ,projection:  { type: d3.geoEquirectangular(), scale: 200, precision: .1}
@@ -49,6 +50,7 @@ function d3maps(o){
                         .translate([props.canvas.width / 2, props.canvas.height / 2])
                         .precision(opt.projection.precision);
     
+        d3maps.defs.addfilters.call(this, ['dropshadow']);
 
         this.svg = svg;
 
@@ -75,7 +77,6 @@ function d3maps(o){
     chart.draw_world = function(opt){
         opt = $.extend(true, {
            key: 'code'
-        ,  feature: 'country'
         ,  behaviors: null
         }, opt);
 
@@ -83,8 +84,8 @@ function d3maps(o){
           , path = d3.geoPath().projection(this.projection)
           , svg = this.svg
           , paths =  svg.selectAll("path." + opt.feature)
-            .data(c.datum(), function(d, i){ return d.properties[opt.key];})
-            .enter().append("path").classed(opt.feature, true)
+                        .data(c.datum(), function(d, i){ return d.properties[opt.key];})
+          , pathsenter =  paths.enter().append("path").classed(opt.feature, true)
             .attr("d", path)
             .each(function(){
                 var _self = d3.select(this);
@@ -139,13 +140,14 @@ function d3maps(o){
         var qtz = d3.scaleQuantize()
                     .range(d3.range(opt.range).map(function(i){
                         return "q" + i + "-9";
-                    })); 
+                    }))
+            ,classed = qtz.range().join(' '); 
 
         qtz.domain(extent);
 
-        this.svg.selectAll('path.country')
+        this.svg.selectAll('path.' + config.feature)
                 .each(function(d){
-                var _self = d3.select(this);
+                var _self = d3.select(this).classed(classed, false);
                 d.measure  = datamap.get(d.properties.code);
 
                 if(d.measure){
@@ -155,19 +157,28 @@ function d3maps(o){
        
         if(config.legend.show && this.legend){
             var keys = this.legend.selectAll('li.key')
-                            .data(qtz.range());
-            keys.enter().append('li').attr('class',  function(d){
-                return 'key ' + d;
-            })
-            .style('border-color', function(d){
-                var matches = d.match(/^q([0-9])-([0-9])$/i);
-                return matches.length >=2 ? colorswatch[matches[2]][matches[1]] : '#fff';
-            })
-            .text(function(d){
-                    var r= qtz.nice().invertExtent(d);
-                    return config.legend.formatter(r[0]);
-            });
+                            .data(qtz.range().map(function(d){
+                                return {
+                                    value: d
+                                  , key: qtz.nice().invertExtent(d)[0]
+                                };
+                            }), function(d){
+                                return d.key;
+                            });
 
+            keys.exit().remove();
+
+            keys.enter().append('li').attr('class',  function(d){
+                return 'key ' + d.value;
+            }).each(function(d){     
+                var _self = d3.select(this)
+                   ,matches = d.value.match(/^q([0-9])-([0-9])$/i)
+                   ,border = matches.length >=2 ? colorswatch[matches[2]][matches[1]] : '#fff'
+                   ;
+                _self.style('border-color', border)
+                     .text(config.legend.formatter(d.key)); 
+
+            });
         }
 
      }
@@ -179,7 +190,8 @@ function d3maps(o){
 d3maps.behaviors = {
     mouseover: function(d){
         if(d && d.measure && d.measure.values){
-            var _self = d3.select(this)
+            var _self = d3.select(this).classed('feature-selected', true)
+                          .style('filter', 'url(#dropshadow)')
                ,_parent = d3.select(this.parentNode)
                ,_keys = d.measure.values.map(function(_d){return _d.key;});
        
@@ -188,11 +200,56 @@ d3maps.behaviors = {
                 .filter(function(_d){
                     return _d.properties.code == d.properties.code || _keys.indexOf(_d.properties.code) >= 0;
                 }).classed('feature-highlight', true);
-        }
+       }
     }
-  ,mouseout: function(d){
+  , mouseout: function(d){
     var _parent = d3.select(this.parentNode);
+    d3.select(this).classed('feature-selected', false).style('filter', '')
     _parent.classed('mouse-over', false);
     _parent.selectAll('path.country').classed('feature-highlight', false);
   }
 }
+
+d3maps.defs = (function(){
+    return {
+        addfilters: function(types){
+            var svg = d3.select(this).selectAll('svg')
+              , _defs = svg.selectAll('defs')
+                           .data([1])
+             , _defsenter = _defs.enter().append('defs');
+    
+             if(types){
+                 types.forEach(function(type){
+                     switch(type){
+                         case 'dropshadow':
+                             filter_dropshadow.call(_defsenter, type);
+                             break;
+                     }
+                 })
+             }
+        }    
+    };
+
+    function filter_dropshadow(type){
+        var _defsenter = this
+         , _filter = _defsenter.selectAll('filter.' + type)
+                          .data([type])
+         , _filterenter = _filter.enter().append('filter')
+                            .attr('id', type)
+                            .classed(type, true);
+
+         _filterenter.attr('height', '130%')
+                     .append('feGaussianBlur').attr('in', 'SourceAlpha').attr('stdDeviation', 3); //<!-- stdDeviation is how much to blur -->
+
+        _filterenter.append('feOffset').attr('dx', 2).attr('dy', 2).attr('result', 'offsetblur'); //<!-- how much to offset -->
+
+        _filterenter.append('feComponentTransfer')
+                    .append('feFuncA').attr('type', 'linear').attr('slope', 0.5); //<!-- slope is the opacity of the shadow -->
+        
+        var _feMerge = _filterenter.append('feMerge');
+
+        _feMerge.append('feMergeNode'); //<!-- this contains the offset blurred image -->
+        _feMerge.append('feMergeNode').attr('in', 'SourceGraphic'); //<!-- this contains the element that the filter is applied to -->
+
+    }
+})();
