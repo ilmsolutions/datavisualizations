@@ -107,13 +107,10 @@ function d3maps(o){
         opt = $.extend(true, {
            vis: {type:'quantize', range: 9}
         }, opt);
-       //build a key map pair
-       var datamap = d3.map(this.filldata, function(d){return d.key})
-          ,_extent = d3.extent(this.filldata.map(function(d){return d.value}));
-        
-       switch(opt.vis.type){
+
+        switch(opt.vis.type){
            case 'quantize':
-                _quantize.call(this, opt.vis, _extent, datamap); 
+                _quantize.call(this, opt.vis); 
                 break;
        }
        return chart;
@@ -122,7 +119,8 @@ function d3maps(o){
      //access properties
     chart.filldata = function(_){
         if(!arguments.length) return this.filldata;
-        this.filldata = _;
+        
+        this.filldata = d3.map(_, function(d){return d.key});
         return chart;
     }
 
@@ -140,11 +138,13 @@ function d3maps(o){
 
 
     //private functions 
-    function _quantize(opt, extent, datamap){
+    function _quantize(opt){
         var qtz = d3.scaleQuantize()
                     .range(d3.range(opt.range).map(function(i){
                         return "q" + i + "-9";
                     }))
+            , datamap = this.filldata
+            , extent = d3.extent(datamap.values().map(function(d){return d.value}))
             ,classed = qtz.range().join(' '); 
 
         qtz.domain(extent);

@@ -60,7 +60,7 @@ d3.json("./maps/countries.json?d=06262018", function(er, world){
 
 //fill data functionality
 var filldata = d3.csv('./data/migration_incoming.csv')
-   ,rformatter = function(d, col){
+   , rformatter = function(d, col){
      //console.log(col);
      var regexp = /[\w\s/-/(/)]+\[([A-Z0-9]*)\]/i
         , kcodematch = d['Destination'].match(regexp)
@@ -70,7 +70,7 @@ var filldata = d3.csv('./data/migration_incoming.csv')
               , skey: scodematch && scodematch.length > 1 ? scodematch[1] : null
               , kcountry: d['Destination'], scountry: d['Source'], year: d['Year'], value: +d[col]}
    }
-   ,loadfilldata = function(valcol, callback){
+   , loadfilldata = function(valcol, callback){
     return filldata.row(function(d){
         return rformatter.call(this, d, valcol);
     }).get(callback);
@@ -79,16 +79,26 @@ var filldata = d3.csv('./data/migration_incoming.csv')
         return $('#year-list').find('li.active').html();
     }
     , updateinformationblock = function(o){
+        //console.log(o);
         var title = informationblock.selectAll('h5')
                            .data([o], function(d){return d.key;})
-          , description = informationblock.selectAll('span')
-                           .data(o.descriptions, function(d, i){return d;});
+          , description = informationblock.selectAll('span.description')
+                           .data(o.descriptions, function(d, i){return d;})
+          , children = informationblock.selectAll('div.children')
+                           .data(o.children ? [o.children] : [], function(d, i){return d;});
 
         title.exit().remove();
         title.enter().append('h5').html(function(d){return d.title;});
 
         description.exit().remove();
-        description.enter().append('span').html(function(d){return d;});
+        description.enter().append('span').attr('class', 'description').html(function(d){return d;});
+
+        children.exit().remove();
+        var childrenter = children.enter().append('div').attr('class', 'children mt-2');
+        childrenter.append('span').attr('class', 'font-weight-bold').html(function(d){return d.title;});
+        childrenter.selectAll('span.child').data(function(d){return d.values}, function(d){return d;})
+                   .enter().append('span').attr('class', 'child')
+                   .html(function(d){return d.name + ': ' + d.value});
 
     }
     , defaultinformationblock;
@@ -99,32 +109,32 @@ dispatches.on('loaded.map', function(){
     loadfilldata('Count', function(cerr, rows){
             var selyear = getselectedyear()
                 , m = d3.nest()
-                  .key(function(d){return d.key})
-                  .key(function(d){return d.skey})
-                  .rollup(function(leaves){                    
-                     return d3.sum(leaves, function(d){return parseInt(d.value)});
-                  })
-                  .entries(rows.filter(function(d){   
-                      var k = Number.parseInt(d.key)
-                        , s = Number.parseInt(d.skey);                                       
-                      return d.key != null && d.skey != null && [selyear].indexOf(d.year) >= 0
-                           && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
-                  }))
-                  ,sum = 0
-                  ,tots = m.map(function(d){
-                    var tot = d3.sum(d.values.map(function(_d){
-                        return _d.value;
-                    })); 
-                    sum += tot;
-                    return {key: d.key, value: tot, values: d.values};
-                   });
+                .key(function(d){return d.key})
+                .key(function(d){return d.skey})
+                .rollup(function(leaves){                    
+                    return d3.sum(leaves, function(d){return parseInt(d.value)});
+                })
+                .entries(rows.filter(function(d){   
+                    var k = Number.parseInt(d.key)
+                    , s = Number.parseInt(d.skey);                                       
+                    return d.key != null && d.skey != null && [selyear].indexOf(d.year) >= 0
+                        && (Number.isNaN(k) || k < 900) && (Number.isNaN(s) || s < 900);
+                }))
+                ,sum = 0
+                ,tots = m.map(function(d){
+                var tot = d3.sum(d.values.map(function(_d){
+                    return _d.value;
+                })); 
+                sum += tot;
+                return {key: d.key, value: tot, values: d.values};
+                });
 
              mapdef.legend.call(map.node(), legend);
              mapdef.filldata.call(map.node(), tots).visualize.call(map.node());
 
              defaultinformationblock = {
                         key: selyear
-                        , title: 'Global Migration In - ' + selyear
+                        , title: 'Foreign Born Population - ' + selyear
                         , descriptions: [
                             'Total: ' + formatter(sum)
                         ]}; 
@@ -135,6 +145,17 @@ dispatches.on('loaded.map', function(){
 })
 .on('mouseover.feature', function(d){
    //render information block
+   var _values = d.measure.values.sort(function(a, b){
+          return d3.descending(a.value, b.value);
+      }).slice(0, 5).map(function(d){
+          var feature = map.datum().filter(function(f){
+              return f.properties.code == d.key;
+          })
+          ,name = feature && feature[0] ? feature[0].properties.name : '';
+
+          return {name: name, value: formatter(d.value)};
+      });
+
    updateinformationblock({
           key: d.properties.code
         , title: 'Country Profile -' + getselectedyear()
@@ -142,7 +163,12 @@ dispatches.on('loaded.map', function(){
             'Country: ' + d.properties.name 
           , 'Total: ' + formatter(d.measure.value)
         ]
-   })
+        , children: {
+            title: 'Top ' + _values.length + ' origin countries:'
+          , values: _values
+        }
+   });
+
 })
 .on('mouseout.feature', function(d){
     updateinformationblock(defaultinformationblock);
@@ -177,7 +203,7 @@ font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
 #information-block{
     position:absolute;
     left: 0;
-    top: 400px;
+    top: 350px;
 }
 
 .country {
@@ -228,6 +254,9 @@ li.key {
     display:block;
 }
 
+#information-block div.children{
+    font-size: 0.8em;
+}
 </style>
 </body>
 </html>
