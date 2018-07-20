@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="//fonts.googleapis.com/css?family=Open+Sans:400,700" rel="stylesheet" type="text/css">
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+<link rel="stylesheet" href="css/colorbrewer.css" type="text/css">
+</head>
+<body>
+<div class="container">                
+    <div id="legend">
+    </div>        
+    <div class="row">
+            <div class="col-4" id="information-container">
+                    <div id="information-text" class="d-flex flex-column">
+                
+                    </div>
+                    <div id="information-chart" class="d-flex flex-column">
+                
+                    </div>
+            </div>
+            <div id="us-states-map" class="col-8">
+            </div>  
+    </div>
+    <div id="year-list">
+    </div>
+</div>
+<script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
+<script src="https://d3js.org/topojson.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo.v1.min.js"></script>
+<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+<script src="http://d3js.org/colorbrewer.v1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="js/d3commons.graph.js"></script>
+<script src="js/d3commons.utilities.js"></script>
+<script src="js/maps.js"></script>
+<script src="js/d3bar.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){
+
+var  dispatches = d3.dispatch('loaded', 'mouseover', 'mouseout')
+     , mapdef = d3maps({height: 500
+                       , dispatches: dispatches
+                       , type: 'usstates'
+                       , feature: 'us-state'
+                       , behaviors: new Map([['mouseover', d3maps.behaviors.mouseover]
+                                            , ['mouseout', d3maps.behaviors.mouseout]])
+                       , legend:{formatter: d3commons.utilities.formatter('numberinmillions')}
+                      })
+     , bardef = d3bar({height: 150
+                       , gap:{top: 20, bottom: 10, left: 0, right: 20}
+                       , title: {text: 'Median Incomes'}     
+                       , axes: {x: {formatter: d3commons.utilities.formatter('currency')}}})
+     ,legend = d3.select("#legend").append("ul")
+               .attr("class", "list-inline")
+     , map = d3.select("#us-states-map")
+     , yearlist = d3.select('#year-list').append('ul')
+     , informationtext = d3.select('#information-text')
+     , informationchart = d3.select('#information-chart')
+     , formatter = d3commons.utilities.formatter('number');
+
+
+d3.json("./maps/usstates.json?d=06262018", function(er, states){
+    if(er) return;
+    var features = topojson.feature(states, states.objects.gz_2010_us_040_00_20m).features;
+    map.datum(features.filter(function(d){
+            return d.properties.code != null;
+    })).call(mapdef);
+});
+
+//fill data functionality
+var filldata = d3.csv('./data/us_population_estimates.csv')
+  , keycol = 'GEOID', valcol = 'FOREIGN_BORN_POP'
+  , details = function(d){
+      var cols = ['TOTAL_POP_MEDIAN_INCOME', 'NATIVE_POP_MEDIAN_INCOME'
+                  , 'FOREIGN_BORN_MEDIAN_INCOME']
+         ,labels = ['Overall', 'Native', 'Foreign Born'];
+      return cols.map(function(col, i){
+          return {name: labels[i], value: +d[col]};
+      });
+  }
+  , rformatter = function(d, keycol, valcol, details){
+        return {
+              key: d[keycol]
+            , value: +d[valcol]
+            , details: details(d)
+        }
+  }
+  , loadfilldata = function(keycol, valcol, details, callback){
+    return filldata.row(function(d){
+        return rformatter.call(this, d, keycol, valcol, details);
+    }).get(callback);
+    }
+    , getselectedyear = function(){
+        return $('#year-list').find('li.active').html();
+    }    
+    , updateinformationchart = function(d){
+        informationchart.datum(d ? d : []).call(bardef);
+    }
+    , updateinformationtext = function(o){
+        //console.log(o);
+        var title = informationtext.selectAll('h5')
+                           .data([o], function(d){return d.key;})
+          , description = informationtext.selectAll('span.description')
+                           .data(o.descriptions, function(d, i){return d;})
+          , children = informationtext.selectAll('div.children')
+                           .data(o.children ? [o.children] : [], function(d, i){return d;});
+
+        title.exit().remove();
+        title.enter().append('h5').html(function(d){return d.title;});
+
+        description.exit().remove();
+        description.enter().append('span').classed('description',true).html(function(d){return d;});
+
+        children.exit().remove();
+        var childrenter = children.enter().append('div').attr('class', 'children mt-2');
+        childrenter.append('span').attr('class', 'font-weight-bold').html(function(d){return d.title;});
+        childrenter.selectAll('span.child').data(function(d){return d.values}, function(d){return d;})
+                   .enter().append('span').attr('class', 'child')
+                   .html(function(d){return d.name + ': ' + d.value});
+
+    }
+    ,updateinformationblock = function(o, d){
+        updateinformationtext(o);
+        updateinformationchart(d);
+    }
+    , defaultinformationblock;
+
+
+dispatches.on('loaded.map', function(){
+    var _self = d3.select(this);
+    loadfilldata(keycol, valcol, details, function(cerr, rows){
+         mapdef.legend.call(map.node(), legend);
+         mapdef.filldata.call(map.node(), rows).visualize.call(map.node());
+
+        defaultinformationblock = {
+                key: 2016
+                , title: 'Foreign Born Population - 2016'
+                , descriptions: [
+                    'Total: ' + formatter(d3.sum(rows.map(function(d){
+                        return d.value;
+                    })))
+                ]}; 
+             updateinformationblock(defaultinformationblock);
+
+    });
+})
+.on('mouseover.feature', function(d){
+   //render information block
+   updateinformationblock({
+          key: d.properties.code
+        , title: 'State Profile - 2016'
+        , descriptions: [
+            'State: ' + d.properties.name 
+          , 'Total: ' + formatter(d.measure.value)
+        ]
+   }, d.measure.details);
+
+})
+.on('mouseout.feature', function(d){
+    updateinformationblock(defaultinformationblock);
+});
+
+
+});
+</script>
+<style type="text/css">
+    body{
+    font-family: "Open Sans","Helvetica Neue",Helvetica,Arial,sans-serif;
+    }
+    
+    .container{
+       position:relative;
+    }
+
+/*
+    #us-states-map{
+       margin:2em;
+    }
+
+    #information-container{
+        position:absolute;
+        left: 0;
+        top: 5em;
+    }*/
+
+    .us-state {
+       stroke: currentColor;
+       stroke-width: 0.06em;
+    }
+    
+    #legend {
+        padding: 1.5em 0 0 1.5em;
+    }
+    
+    
+    li.key {
+       display: inline-block;
+        border-top-width: 15px;
+        border-top-style: solid;
+        font-size: .75em;
+        width: 10%;
+        padding-left: 0;
+        padding-right: 0;
+    }
+    
+    #year-list li{
+        display: inline-block;
+        border-top-width:5px;
+        border-top-style: solid;
+        font-size: .75em;
+        width: 10%;
+        cursor:pointer;
+        margin: 5px;
+    }
+    
+    #year-list li.active{
+        border-color:cornflowerblue;
+    }
+    
+    .mouse-over .us-state:not(.feature-highlight)
+    , .mouse-over .us-state:not(.feature-selected) {
+        fill-opacity: 0.6;
+        stroke-opacity: 0.6;
+    } 
+
+    .mouse-over .us-state.feature-highlight
+    , .mouse-over .us-state.feature-selected {
+        fill-opacity: 1;
+        stroke-opacity: 1;
+    }
+    
+    #information-block span{
+        display:block;
+    }
+    
+    #information-block div.children{
+        font-size: 0.8em;
+    }
+    </style>
+    
+</body>
+</html>

@@ -4,11 +4,16 @@ function d3maps(o){
       ,feature: 'country' 
       ,colorbrewer: 'YlOrRd'
       ,dispatches: null
-      ,projection:  { type: d3.geoEquirectangular(), scale: 200, precision: .1}
+      //,projection:  { type: d3.geoEquirectangular(), scale: 200, precision: .1}
       ,margin:{top: 0, left: 0, bottom: 0, right: 0}
       ,gap:{top: 0, left: 0, bottom: 0, right: 0}
       ,legend:{show: true, formatter: d3.format(".2s")}
+    }
+    ,defaultProjections = {
+          'world': { type: d3.geoEquirectangular(), scale: 200, precision: .1}
+        , 'usstates':{type: d3.geoAlbersUsa(), scale: 1000, precision: .1}
     };
+
     if(o)
       config = $.extend(true, config, o);
 
@@ -34,9 +39,13 @@ function d3maps(o){
 
     chart.draw = function(opt){
         opt = (opt) ? $.extend(true, {}, config, opt) : config;
-        
-        if(!opt.projection || !opt.projection.type) return;
-   
+
+
+        if(!opt.projection || !opt.projection.type) {
+            opt.projection = defaultProjections[opt.type];
+            if(!opt.projection) return;
+        }
+
         var container = d3.select(this),
             props = chart.getprops.call(this, opt),
             svg = container.selectAll('svg')
@@ -57,18 +66,9 @@ function d3maps(o){
         this.svg = svg;
 
         var _tks = opt.type.split('.'),
-            _type = _tks[0]
-            _draw = null;       
-        
-        
-        switch(_type){
-            case 'world':
-                _draw = chart.draw_world;
-                 break;
-        }
+            _type = _tks[0];   
 
-        if(_draw)
-           _draw.call(this, opt);
+        chart.draw_map.call(this, opt);
 
         if(this.dispatches){
             this.dispatches.call('loaded', svg);
@@ -78,7 +78,7 @@ function d3maps(o){
         return chart;
     }
 
-    chart.draw_world = function(opt){
+    chart.draw_map = function(opt){
         opt = $.extend(true, {
            key: 'code'
         ,  behaviors: null
@@ -87,9 +87,9 @@ function d3maps(o){
         var c = d3.select(this)
           , path = d3.geoPath().projection(this.projection)
           , svg = this.svg
-          , paths =  svg.selectAll("path." + opt.feature)
+          , paths =  svg.selectAll("path.feature")
                         .data(c.datum(), function(d, i){ return d.properties[opt.key];})
-          , pathsenter =  paths.enter().append("path").classed(opt.feature, true)
+          , pathsenter =  paths.enter().append("path").classed('feature ' + opt.feature, true)
             .attr("d", path)
             .each(function(){
                 var _self = d3.select(this);
@@ -119,8 +119,9 @@ function d3maps(o){
      //access properties
     chart.filldata = function(_){
         if(!arguments.length) return this.filldata;
-        
+
         this.filldata = d3.map(_, function(d){return d.key});
+        //console.log(this.filldata);
         return chart;
     }
 
@@ -147,9 +148,11 @@ function d3maps(o){
             , extent = d3.extent(datamap.values().map(function(d){return d.value}))
             ,classed = qtz.range().join(' '); 
 
+        //console.log(datamap.values().map(function(d){return d.value}));
+        //console.log(extent);
         qtz.domain(extent);
 
-        this.svg.selectAll('path.' + config.feature)
+        this.svg.selectAll('path.feature')
                 .each(function(d){
                 var _self = d3.select(this).classed(classed, false);
                 d.measure  = datamap.get(d.properties.code);
@@ -193,15 +196,16 @@ function d3maps(o){
 
 d3maps.behaviors = {
     mouseover: function(d){
-        if(d && d.measure && d.measure.values){
+        if(d && d.measure){
             var _self = d3.select(this).classed('feature-selected', true)
                           .style('filter', 'url(#dropshadow)')
                ,_parent = d3.select(this.parentNode)
                ,_container = this.parentNode.parentNode
-               ,_keys = d.measure.values.map(function(_d){return _d.key;});
+               ,_keys = d.measure.values && d.measure.values.map(function(_d){return _d.key;});
        
             _parent.classed('mouse-over', true);
-            _parent.selectAll('path.country')
+            if(_keys)
+            _parent.selectAll('path.feature')
                 .filter(function(_d){
                     return _d.properties.code == d.properties.code || _keys.indexOf(_d.properties.code) >= 0;
                 }).classed('feature-highlight', true);
@@ -215,7 +219,7 @@ d3maps.behaviors = {
        ,_container = this.parentNode.parentNode;
     d3.select(this).classed('feature-selected', false).style('filter', '')
     _parent.classed('mouse-over', false);
-    _parent.selectAll('path.country').classed('feature-highlight', false);
+    _parent.selectAll('path.feature').classed('feature-highlight', false);
     _container.dispatches.call('mouseout', this, d);
   }
 }

@@ -13,7 +13,7 @@ d3commons.utilities =  {
             case 'numberinmillions':
                 return d3.format('.2s');
             case 'currency':
-                return d3.format('$,.2$');
+                return d3.format('$,.2s');
             case "currencyinmillions":
                 return d3.format('$,.2s');
         }
