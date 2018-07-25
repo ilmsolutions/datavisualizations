@@ -11,12 +11,15 @@
     <div id="legend">
     </div>        
     <div class="row">
-            <div class="col-4" id="information-container">
+            <div class="col-4" id="information-block">
                     <div id="information-text" class="d-flex flex-column">
                 
                     </div>
-                    <div id="information-chart" class="d-flex flex-column">
+                    <div id="information-median-chart" class="d-flex flex-column">
                 
+                    </div>
+                    <div id="information-avg-chart" class="d-flex flex-column">
+
                     </div>
             </div>
             <div id="us-states-map" class="col-8">
@@ -56,7 +59,8 @@ var  dispatches = d3.dispatch('loaded', 'mouseover', 'mouseout')
      , map = d3.select("#us-states-map")
      , yearlist = d3.select('#year-list').append('ul')
      , informationtext = d3.select('#information-text')
-     , informationchart = d3.select('#information-chart')
+     , informationmedianchart = d3.select('#information-median-chart')
+     , informationavgchart = d3.select('#information-avg-chart')
      , formatter = d3commons.utilities.formatter('percent');
 
 
@@ -71,10 +75,14 @@ d3.json("./maps/usstates.json?d=06262018", function(er, states){
 //fill data functionality
 var filldata = d3.csv('./data/data-ipums-incomes.csv')
   , keycol = 'GEOID', valcol = 'FOREIGN_BORN_POP', dencol = 'TOT_POP'
-  , details = function(d){
-      var cols = ['TOT_POP_MEDIAN_INCOME', 'NATIVE_POP_MEDIAN_INCOME'
+  , mediancols = ['TOT_POP_MEDIAN_INCOME', 'NATIVE_POP_MEDIAN_INCOME'
                   , 'FOREIGN_BORN_MEDIAN_INCOME']
+  , avgcols = ['TOT_POP_AVG_INCOME', 'NATIVE_POP_AVG_INCOME'
+                  , 'FOREIGN_BORN_AVG_INCOME']
+  , details = function(d, type){
+      var cols = (type == 'median' ? mediancols : avgcols)
          ,labels = ['Overall', 'Native', 'Foreign Born'];
+
       return cols.map(function(col, i){
           return {name: labels[i], value: +d[col]};
       });
@@ -86,7 +94,8 @@ var filldata = d3.csv('./data/data-ipums-incomes.csv')
             , value: +d[valcol] / +d[dencol]
             , numerator: +d[valcol]
             , denominator: +d[dencol]
-            , details: details(d)
+            , median: details(d, 'median')
+            , avg: details(d, 'avg')
         }
   }
   , loadfilldata = function(keycol, valcol, details, callback){
@@ -97,8 +106,8 @@ var filldata = d3.csv('./data/data-ipums-incomes.csv')
     , getselectedyear = function(){
         return $('#year-list').find('li.active').html();
     }    
-    , updateinformationchart = function(d){
-        informationchart.datum(d ? d : []).call(bardef);
+    , updateinformationchart = function(sel, opt, d){
+        sel.datum(d ? d : []).call(bardef, opt);
     }
     , updateinformationtext = function(o){
         //console.log(o);
@@ -125,7 +134,8 @@ var filldata = d3.csv('./data/data-ipums-incomes.csv')
     }
     ,updateinformationblock = function(o, d){
         updateinformationtext(o);
-        updateinformationchart(d);
+        informationmedianchart.call(updateinformationchart, {title: {text: 'Median Incomes'}}, d && d.median ? d.median : null);
+        informationavgchart.call(updateinformationchart, {title: {text: 'Average Incomes'}}, d && d.avg ? d.avg : null);
     }
     , defaultinformationblock;
 
@@ -159,12 +169,12 @@ dispatches.on('loaded.map', function(){
    //render information block
    updateinformationblock({
           key: d.properties.code
-        , title: 'State Profile - 2016'
+        , title: 'State Profile - ' + getselectedyear()
         , descriptions: [
             'State: ' + d.properties.name 
           , 'Total: ' + formatter(d.measure.value)
         ]
-   }, d.measure.details);
+   }, {median: d.measure.median, avg: d.measure.avg});
 
 })
 .on('mouseout.feature', function(d){
@@ -257,8 +267,8 @@ $(yearlist.node()).on('click', 'li', function(){
         display:block;
     }
     
-    #information-block div.children{
-        font-size: 0.8em;
+    #information-block div:not(:first-child){
+        margin-top: 1.5em;
     }
     </style>
     
