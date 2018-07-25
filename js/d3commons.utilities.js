@@ -4,7 +4,7 @@ d3commons.utilities =  {
     formatter: function (type) {
         switch (type) {
             case 'percent':
-                return d3.format(',%');
+                return d3.format('.0%');
             case 'decimal':
                 return d3.format('.1f');
                 //return d3.format('.0%');

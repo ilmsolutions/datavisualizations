@@ -78,14 +78,15 @@ function d3bar(o){
                                             (opt.margin.left + opt.gap.left)
                                         , (opt.margin.top + opt.gap.top)
                                     ] + ')')
+                  , _bars = _p.append('g').classed('bars', true)
+                              .call(renderbars, datum, o.scales)      
                   , _xaxis = _p.append('g').classed('xaxis', true)
                                   .attr('transform', 'translate(' + [0, d.height] + ')')
                                   .call(o.axisgen.x)
                   , _yaxis = _p.append('g').classed('yaxis', true)
                                   .attr('transform', 'translate(' + [0, 0] + ')')
                                   .call(o.axisgen.y)
-                  , _bars = _p.append('g').classed('bars', true)
-                              .call(renderbars, datum, o.scales);
+                  ;
 
         });
 
@@ -94,9 +95,10 @@ function d3bar(o){
             console.log('in update...');
             var o = getaxes.call(this, datum, opt)
             , _p = d3.select(this)
+            , _bars = _p.selectAll('g.bars').call(renderbars, datum, o.scales)            
             , _xaxis = _p.select('g.xaxis').call(o.axisgen.x)
             , _yaxis = _p.select('g.yaxis').call(o.axisgen.y)
-            , _bars = _p.selectAll('g.bars').call(renderbars, datum, o.scales);
+            ;
         });
 
         this.svg = svg;
