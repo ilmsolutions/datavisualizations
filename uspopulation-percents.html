@@ -28,6 +28,11 @@
     <div id="year-list">
     </div>
 </div>
+<footer>
+    <div class="container text-muted">
+        <p>Data sourced from IPUMS USA</p>
+    </div>
+</footer>
 <script src="https://d3js.org/d3.v4.0.0-alpha.50.min.js"></script>
 <script src="https://d3js.org/topojson.v1.min.js"></script>
 <script src="https://d3js.org/d3-geo.v1.min.js"></script>
@@ -73,7 +78,7 @@ d3.json("./maps/usstates.json?d=06262018", function(er, states){
 });
 
 //fill data functionality
-var filldata = d3.csv('./data/data-ipums-incomes-19802016.csv')
+var filldata = d3.csv('./data/data-ipums-personal-income-19802016.csv')
   , keycol = 'GEOID', valcol = 'FOREIGN_BORN_POP', dencol = 'TOT_POP'
   , mediancols = ['TOT_POP_MEDIAN_INCOME', 'NATIVE_POP_MEDIAN_INCOME'
                   , 'FOREIGN_BORN_MEDIAN_INCOME']
@@ -134,10 +139,10 @@ var filldata = d3.csv('./data/data-ipums-incomes-19802016.csv')
     }
     ,updateinformationblock = function(o, d){
         updateinformationtext(o);
-        informationmedianchart.call(updateinformationchart, {title: {text: 'Median Incomes'}}, d && d.median ? d.median : null);
-        informationavgchart.call(updateinformationchart, {title: {text: 'Average Incomes'}}, d && d.avg ? d.avg : null);
+        informationmedianchart.call(updateinformationchart, {title: {text: 'Median Personal Income'}}, d && d.median ? d.median : null);
+        informationavgchart.call(updateinformationchart, {title: {text: 'Average Personal Income'}}, d && d.avg ? d.avg : null);
     }
-    , defaultinformationblock;
+    , defaultinformationblock, totals;
 
 
 dispatches.on('loaded.map', function(){
@@ -147,10 +152,11 @@ dispatches.on('loaded.map', function(){
     loadfilldata(keycol, valcol, details, function(cerr, rows){
         var filteredrows =  rows.filter(function(d){
              return d.year == selyear;
-         })
-         , numerator = d3.sum(filteredrows.map(function(d){return d.numerator; }))
-         , denominator = d3.sum(filteredrows.map(function(d){return d.denominator;}));
+         });
 
+         totals = filteredrows.filter(function(d){
+             return d.key == '0400000US';
+         });
          mapdef.legend.call(map.node(), legend);
          mapdef.filldata.call(map.node(), filteredrows)
                .visualize.call(map.node());
@@ -159,9 +165,9 @@ dispatches.on('loaded.map', function(){
                 key: selyear
                 , title: 'Foreign Born Population - ' + selyear
                 , descriptions: [
-                    'Percent of Population : ' + formatter(numerator/denominator)
+                    'Percent of Population : ' + formatter(totals[0].value)
                 ]}; 
-             updateinformationblock(defaultinformationblock);
+             updateinformationblock(defaultinformationblock, {median: totals[0].median, avg: totals[0].avg});
 
     });
 })
@@ -178,7 +184,7 @@ dispatches.on('loaded.map', function(){
 
 })
 .on('mouseout.feature', function(d){
-    updateinformationblock(defaultinformationblock);
+    updateinformationblock(defaultinformationblock, {median: totals[0].median, avg: totals[0].avg});
 });
 
 yearlist.selectAll('li')
